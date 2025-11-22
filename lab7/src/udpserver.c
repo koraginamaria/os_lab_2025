@@ -7,15 +7,57 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <getopt.h>
 
-#define SERV_PORT 20001
-#define BUFSIZE 1024
 #define SADDR struct sockaddr
 #define SLEN sizeof(struct sockaddr_in)
 
-int main() {
+int main(int argc, char *argv[]) {
   int sockfd, n;
-  char mesg[BUFSIZE], ipadr[16];
+  int bufsize = 1024;
+  int port = 20001;
+
+  // Обработка аргументов командной строки
+  static struct option options[] = {
+    {"bufsize", required_argument, 0, 0},
+    {"port", required_argument, 0, 0},
+    {0, 0, 0, 0}
+  };
+
+  int option_index = 0;
+  while (1) {
+    int c = getopt_long(argc, argv, "", options, &option_index);
+    if (c == -1) break;
+
+    switch (c) {
+      case 0:
+        switch (option_index) {
+          case 0:
+            bufsize = atoi(optarg);
+            if (bufsize <= 0) {
+              fprintf(stderr, "bufsize must be positive\n");
+              exit(1);
+            }
+            break;
+          case 1:
+            port = atoi(optarg);
+            if (port <= 0) {
+              fprintf(stderr, "port must be positive\n");
+              exit(1);
+            }
+            break;
+          default:
+            fprintf(stderr, "Invalid option\n");
+            exit(1);
+        }
+        break;
+      default:
+        fprintf(stderr, "getopt error\n");
+        exit(1);
+    }
+  }
+
+  char mesg[bufsize], ipadr[16];
   struct sockaddr_in servaddr;
   struct sockaddr_in cliaddr;
 
@@ -27,24 +69,25 @@ int main() {
   memset(&servaddr, 0, SLEN);
   servaddr.sin_family = AF_INET;
   servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-  servaddr.sin_port = htons(SERV_PORT);
+  servaddr.sin_port = htons(port);
 
   if (bind(sockfd, (SADDR *)&servaddr, SLEN) < 0) {
     perror("bind problem");
     exit(1);
   }
-  printf("SERVER starts...\n");
+
+  printf("UDP SERVER starts on port %d...\n", port);
 
   while (1) {
     unsigned int len = SLEN;
 
-    if ((n = recvfrom(sockfd, mesg, BUFSIZE, 0, (SADDR *)&cliaddr, &len)) < 0) {
+    if ((n = recvfrom(sockfd, mesg, bufsize, 0, (SADDR *)&cliaddr, &len)) < 0) {
       perror("recvfrom");
       exit(1);
     }
     mesg[n] = 0;
 
-    printf("REQUEST %s      FROM %s : %d\n", mesg,
+    printf("REQUEST: %s FROM %s:%d\n", mesg,
            inet_ntop(AF_INET, (void *)&cliaddr.sin_addr.s_addr, ipadr, 16),
            ntohs(cliaddr.sin_port));
 
